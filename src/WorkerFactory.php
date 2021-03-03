@@ -13,8 +13,6 @@ namespace Temporal;
 
 use Doctrine\Common\Annotations\Reader;
 use JetBrains\PhpStorm\Pure;
-use ProxyManager\Factory\AbstractBaseFactory;
-use ProxyManager\Factory\LazyLoadingValueHolderFactory;
 use React\Promise\PromiseInterface;
 use Spiral\Attributes\AnnotationReader;
 use Spiral\Attributes\AttributeReader;
@@ -154,11 +152,6 @@ class WorkerFactory implements WorkerFactoryInterface, LoopInterface
     private EnvironmentInterface $env;
 
     /**
-     * @var LazyLoadingValueHolderFactory
-     */
-    private LazyLoadingValueHolderFactory $proxyFactory;
-
-    /**
      * @param DataConverterInterface $dataConverter
      * @param RPCConnectionInterface $rpc
      */
@@ -252,14 +245,6 @@ class WorkerFactory implements WorkerFactoryInterface, LoopInterface
     }
 
     /**
-     * @return LazyLoadingValueHolderFactory
-     */
-    public function getProxyFactory(): LazyLoadingValueHolderFactory
-    {
-        return $this->proxyFactory;
-    }
-
-    /**
      * {@inheritDoc}
      */
     public function run(HostConnectionInterface $host = null): int
@@ -301,7 +286,6 @@ class WorkerFactory implements WorkerFactoryInterface, LoopInterface
         $this->responses = $this->createQueue();
         $this->client = $this->createClient();
         $this->server = $this->createServer();
-        $this->proxyFactory = $this->createProxyFactory();
         $this->env = $this->createEnvironment();
     }
 
@@ -311,14 +295,6 @@ class WorkerFactory implements WorkerFactoryInterface, LoopInterface
     protected function createEnvironment(): EnvironmentInterface
     {
         return new Environment();
-    }
-
-    /**
-     * @return LazyLoadingValueHolderFactory
-     */
-    protected function createProxyFactory(): LazyLoadingValueHolderFactory
-    {
-        return new LazyLoadingValueHolderFactory();
     }
 
     /**

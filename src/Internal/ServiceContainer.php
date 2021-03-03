@@ -114,14 +114,7 @@ final class ServiceContainer
     public ExceptionInterceptorInterface $exceptionInterceptor;
 
     /**
-     * @var AbstractBaseFactory
-     */
-    #[Immutable]
-    public AbstractBaseFactory $proxy;
-
-    /**
      * @param LoopInterface $loop
-     * @param LazyLoadingValueHolderFactory $proxy
      * @param EnvironmentInterface $env
      * @param ClientInterface $client
      * @param ReaderInterface $reader
@@ -132,7 +125,6 @@ final class ServiceContainer
      */
     public function __construct(
         LoopInterface $loop,
-        LazyLoadingValueHolderFactory $proxy,
         EnvironmentInterface $env,
         ClientInterface $client,
         ReaderInterface $reader,
@@ -142,8 +134,6 @@ final class ServiceContainer
         ExceptionInterceptorInterface $exceptionInterceptor
     ) {
         $this->loop = $loop;
-        $this->proxy = $proxy;
-
         $this->env = $env;
         $this->client = $client;
         $this->reader = $reader;
@@ -171,7 +161,6 @@ final class ServiceContainer
     ): self {
         return new self(
             $worker,
-            $worker->getProxyFactory(),
             $worker->getEnvironment(),
             $worker->getClient(),
             $worker->getReader(),
