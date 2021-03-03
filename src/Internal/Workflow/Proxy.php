@@ -22,6 +22,19 @@ abstract class Proxy
     abstract public function __call(string $method, array $args);
 
     /**
+     * @param Proxy $context
+     * @return \Closure
+     */
+    public static function initializer(self $context): \Closure
+    {
+        return static function (&$ctx, $realProxy, string $method, array $params, &$initializer) use ($context) {
+            [$ctx, $initializer] = [$context, null];
+
+            return $context->$method(...$params);
+        };
+    }
+
+    /**
      * @psalm-template T of Prototype
      *
      * @param array<T> $prototypes

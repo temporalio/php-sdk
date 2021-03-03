@@ -12,9 +12,10 @@ declare(strict_types=1);
 namespace Temporal\Internal;
 
 use JetBrains\PhpStorm\Immutable;
+use ProxyManager\Factory\AbstractBaseFactory;
+use ProxyManager\Factory\LazyLoadingValueHolderFactory;
 use Spiral\Attributes\ReaderInterface;
 use Temporal\DataConverter\DataConverterInterface;
-use Temporal\Exception\ExceptionInterceptor;
 use Temporal\Exception\ExceptionInterceptorInterface;
 use Temporal\Internal\Declaration\Prototype\ActivityPrototype;
 use Temporal\Internal\Declaration\Prototype\ActivityCollection;
@@ -28,7 +29,6 @@ use Temporal\Internal\Repository\RepositoryInterface;
 use Temporal\Internal\Transport\ClientInterface;
 use Temporal\Internal\Workflow\ProcessCollection;
 use Temporal\WorkerFactory;
-use Temporal\Worker\Environment\Environment;
 use Temporal\Worker\Environment\EnvironmentInterface;
 use Temporal\Worker\LoopInterface;
 
@@ -110,10 +110,18 @@ final class ServiceContainer
     /**
      * @var ExceptionInterceptorInterface
      */
+    #[Immutable]
     public ExceptionInterceptorInterface $exceptionInterceptor;
 
     /**
+     * @var AbstractBaseFactory
+     */
+    #[Immutable]
+    public AbstractBaseFactory $proxy;
+
+    /**
      * @param LoopInterface $loop
+     * @param LazyLoadingValueHolderFactory $proxy
      * @param EnvironmentInterface $env
      * @param ClientInterface $client
      * @param ReaderInterface $reader
@@ -124,6 +132,7 @@ final class ServiceContainer
      */
     public function __construct(
         LoopInterface $loop,
+        LazyLoadingValueHolderFactory $proxy,
         EnvironmentInterface $env,
         ClientInterface $client,
         ReaderInterface $reader,
@@ -132,8 +141,10 @@ final class ServiceContainer
         DataConverterInterface $dataConverter,
         ExceptionInterceptorInterface $exceptionInterceptor
     ) {
-        $this->env = $env;
         $this->loop = $loop;
+        $this->proxy = $proxy;
+
+        $this->env = $env;
         $this->client = $client;
         $this->reader = $reader;
         $this->queue = $queue;
@@ -150,17 +161,17 @@ final class ServiceContainer
     }
 
     /**
-     * @param WorkerFactory                 $worker
+     * @param WorkerFactory $worker
      * @param ExceptionInterceptorInterface $exceptionInterceptor
      * @return static
      */
     public static function fromWorkerFactory(
         WorkerFactory $worker,
         ExceptionInterceptorInterface $exceptionInterceptor
-    ): self
-    {
+    ): self {
         return new self(
             $worker,
+            $worker->getProxyFactory(),
             $worker->getEnvironment(),
             $worker->getClient(),
             $worker->getReader(),

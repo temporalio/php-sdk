@@ -11,9 +11,10 @@ declare(strict_types=1);
 
 namespace Temporal;
 
-use Doctrine\Common\Annotations\AnnotationReader as DoctrineReader;
 use Doctrine\Common\Annotations\Reader;
 use JetBrains\PhpStorm\Pure;
+use ProxyManager\Factory\AbstractBaseFactory;
+use ProxyManager\Factory\LazyLoadingValueHolderFactory;
 use React\Promise\PromiseInterface;
 use Spiral\Attributes\AnnotationReader;
 use Spiral\Attributes\AttributeReader;
@@ -68,7 +69,7 @@ use Temporal\Worker\WorkerOptions;
  *
  * </code>
  */
-final class WorkerFactory implements WorkerFactoryInterface, LoopInterface
+class WorkerFactory implements WorkerFactoryInterface, LoopInterface
 {
     use EventEmitterTrait;
 
@@ -153,6 +154,11 @@ final class WorkerFactory implements WorkerFactoryInterface, LoopInterface
     private EnvironmentInterface $env;
 
     /**
+     * @var LazyLoadingValueHolderFactory
+     */
+    private LazyLoadingValueHolderFactory $proxyFactory;
+
+    /**
      * @param DataConverterInterface $dataConverter
      * @param RPCConnectionInterface $rpc
      */
@@ -187,16 +193,11 @@ final class WorkerFactory implements WorkerFactoryInterface, LoopInterface
         WorkerOptions $options = null,
         ExceptionInterceptorInterface $exceptionInterceptor = null
     ): WorkerInterface {
+        $exceptionInterceptor ??= ExceptionInterceptor::createDefault();
 
-        $worker = new Worker(
-            $taskQueue,
-            $options ?? WorkerOptions::new(),
-            ServiceContainer::fromWorkerFactory(
-                $this,
-                $exceptionInterceptor ?? ExceptionInterceptor::createDefault()
-            ),
-            $this->rpc
-        );
+        $container = ServiceContainer::fromWorkerFactory($this, $exceptionInterceptor);
+
+        $worker = new Worker($taskQueue, $options ?? WorkerOptions::new(), $container, $this->rpc);
         $this->queues->add($worker);
 
         return $worker;
@@ -251,6 +252,14 @@ final class WorkerFactory implements WorkerFactoryInterface, LoopInterface
     }
 
     /**
+     * @return LazyLoadingValueHolderFactory
+     */
+    public function getProxyFactory(): LazyLoadingValueHolderFactory
+    {
+        return $this->proxyFactory;
+    }
+
+    /**
      * {@inheritDoc}
      */
     public function run(HostConnectionInterface $host = null): int
@@ -292,19 +301,33 @@ final class WorkerFactory implements WorkerFactoryInterface, LoopInterface
         $this->responses = $this->createQueue();
         $this->client = $this->createClient();
         $this->server = $this->createServer();
-        $this->env = new Environment();
+        $this->proxyFactory = $this->createProxyFactory();
+        $this->env = $this->createEnvironment();
+    }
+
+    /**
+     * @return EnvironmentInterface
+     */
+    protected function createEnvironment(): EnvironmentInterface
+    {
+        return new Environment();
+    }
+
+    /**
+     * @return LazyLoadingValueHolderFactory
+     */
+    protected function createProxyFactory(): LazyLoadingValueHolderFactory
+    {
+        return new LazyLoadingValueHolderFactory();
     }
 
     /**
      * @return ReaderInterface
      */
-    private function createReader(): ReaderInterface
+    protected function createReader(): ReaderInterface
     {
         if (\interface_exists(Reader::class)) {
-            return new SelectiveReader([
-                                           new AnnotationReader(),
-                                           new AttributeReader(),
-                                       ]);
+            return new SelectiveReader([new AnnotationReader(), new AttributeReader()]);
         }
 
         return new AttributeReader();
@@ -313,7 +336,7 @@ final class WorkerFactory implements WorkerFactoryInterface, LoopInterface
     /**
      * @return RepositoryInterface<WorkerInterface>
      */
-    private function createTaskQueue(): RepositoryInterface
+    protected function createTaskQueue(): RepositoryInterface
     {
         return new ArrayRepository();
     }
@@ -321,7 +344,7 @@ final class WorkerFactory implements WorkerFactoryInterface, LoopInterface
     /**
      * @return RouterInterface
      */
-    private function createRouter(): RouterInterface
+    protected function createRouter(): RouterInterface
     {
         $router = new Router();
         $router->add(new Router\GetWorkerInfo($this->queues, $this->marshaller));
@@ -332,7 +355,7 @@ final class WorkerFactory implements WorkerFactoryInterface, LoopInterface
     /**
      * @return QueueInterface
      */
-    private function createQueue(): QueueInterface
+    protected function createQueue(): QueueInterface
     {
         return new ArrayQueue();
     }
@@ -341,7 +364,7 @@ final class WorkerFactory implements WorkerFactoryInterface, LoopInterface
      * @return ClientInterface
      */
     #[Pure]
-    private function createClient(): ClientInterface
+    protected function createClient(): ClientInterface
     {
         return new Client($this->responses, $this);
     }
@@ -349,7 +372,7 @@ final class WorkerFactory implements WorkerFactoryInterface, LoopInterface
     /**
      * @return ServerInterface
      */
-    private function createServer(): ServerInterface
+    protected function createServer(): ServerInterface
     {
         return new Server($this->responses, \Closure::fromCallable([$this, 'onRequest']));
     }
@@ -358,7 +381,7 @@ final class WorkerFactory implements WorkerFactoryInterface, LoopInterface
      * @param ReaderInterface $reader
      * @return MarshallerInterface
      */
-    private function createMarshaller(ReaderInterface $reader): MarshallerInterface
+    protected function createMarshaller(ReaderInterface $reader): MarshallerInterface
     {
         return new Marshaller(new AttributeMapperFactory($reader));
     }
@@ -366,7 +389,7 @@ final class WorkerFactory implements WorkerFactoryInterface, LoopInterface
     /**
      * @return CodecInterface
      */
-    private function createCodec(): CodecInterface
+    protected function createCodec(): CodecInterface
     {
         // todo: make it better
         switch ($_SERVER['RR_CODEC'] ?? null) {

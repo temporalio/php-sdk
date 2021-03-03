@@ -12,6 +12,7 @@ declare(strict_types=1);
 namespace Temporal\Internal\Workflow;
 
 use Carbon\CarbonInterface;
+use JetBrains\PhpStorm\Pure;
 use React\Promise\Deferred;
 use React\Promise\PromiseInterface;
 use Temporal\Activity\ActivityOptions;
@@ -262,7 +263,9 @@ class WorkflowContext implements WorkflowContextInterface
 
         $workflow = $this->services->workflowsReader->fromClass($class);
 
-        return new ContinueAsNewProxy($class, $workflow, $options, $this);
+        $proxy = new ContinueAsNewProxy($class, $workflow, $options, $this);
+
+        return $this->services->proxy->createProxy($class, Proxy::initializer($proxy));
     }
 
     /**
@@ -305,12 +308,9 @@ class WorkflowContext implements WorkflowContextInterface
     {
         $workflow = $this->services->workflowsReader->fromClass($class);
 
-        return new ChildWorkflowProxy(
-            $class,
-            $workflow,
-            $options ?? new ChildWorkflowOptions(),
-            $this
-        );
+        $proxy = new ChildWorkflowProxy($class, $workflow, $options ?? new ChildWorkflowOptions(), $this);
+
+        return $this->services->proxy->createProxy($class, Proxy::initializer($proxy));
     }
 
     /**
@@ -322,7 +322,9 @@ class WorkflowContext implements WorkflowContextInterface
 
         $stub = $this->newUntypedExternalWorkflowStub($execution);
 
-        return new ExternalWorkflowProxy($class, $workflow, $stub);
+        $proxy = new ExternalWorkflowProxy($class, $workflow, $stub);
+
+        return $this->services->proxy->createProxy($class, Proxy::initializer($proxy));
     }
 
     /**
@@ -362,12 +364,9 @@ class WorkflowContext implements WorkflowContextInterface
     {
         $activities = $this->services->activitiesReader->fromClass($class);
 
-        return new ActivityProxy(
-            $class,
-            $activities,
-            $options ?? ActivityOptions::new(),
-            $this
-        );
+        $proxy = new ActivityProxy($class, $activities, $options ?? ActivityOptions::new(), $this);
+
+        return $this->services->proxy->createProxy($class, Proxy::initializer($proxy));
     }
 
     /**

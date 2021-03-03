@@ -11,6 +11,7 @@ declare(strict_types=1);
 
 namespace Temporal\Client;
 
+use ProxyManager\Factory\LazyLoadingValueHolderFactory;
 use Spiral\Attributes\AttributeReader;
 use Temporal\Client\GRPC\ServiceClientInterface;
 use Temporal\Common\MethodRetry;
@@ -23,6 +24,7 @@ use Temporal\Internal\Client\WorkflowStarter;
 use Temporal\Internal\Declaration\Reader\WorkflowReader;
 use Temporal\Internal\Client\WorkflowProxy;
 use Temporal\Internal\Client\WorkflowStub;
+use Temporal\Internal\Workflow\Proxy;
 use Temporal\Workflow\WorkflowExecution;
 use Temporal\Workflow\WorkflowRunInterface;
 use Temporal\Workflow\WorkflowStub as WorkflowStubConverter;
@@ -40,20 +42,25 @@ class WorkflowClient implements WorkflowClientInterface
     private DataConverterInterface $converter;
     private WorkflowStarter $starter;
     private WorkflowReader $reader;
+    private LazyLoadingValueHolderFactory $proxy;
 
     /**
      * @param ServiceClientInterface $serviceClient
      * @param ClientOptions|null $options
      * @param DataConverterInterface|null $converter
+     * @param LazyLoadingValueHolderFactory|null $proxy
      */
     public function __construct(
         ServiceClientInterface $serviceClient,
         ClientOptions $options = null,
-        DataConverterInterface $converter = null
+        DataConverterInterface $converter = null,
+        LazyLoadingValueHolderFactory $proxy = null
     ) {
         $this->client = $serviceClient;
         $this->clientOptions = $options ?? new ClientOptions();
         $this->converter = $converter ?? DataConverter::createDefault();
+        $this->proxy = $proxy ?? new LazyLoadingValueHolderFactory();
+
         $this->starter = new WorkflowStarter($serviceClient, $this->converter, $this->clientOptions);
         $this->reader = new WorkflowReader(new AttributeReader());
     }
@@ -62,14 +69,16 @@ class WorkflowClient implements WorkflowClientInterface
      * @param ServiceClientInterface $serviceClient
      * @param ClientOptions|null $options
      * @param DataConverterInterface|null $converter
+     * @param LazyLoadingValueHolderFactory|null $proxy
      * @return static
      */
     public static function create(
         ServiceClientInterface $serviceClient,
         ClientOptions $options = null,
-        DataConverterInterface $converter = null
+        DataConverterInterface $converter = null,
+        LazyLoadingValueHolderFactory $proxy = null
     ): self {
-        return new self($serviceClient, $options, $converter);
+        return new self($serviceClient, $options, $converter, $proxy);
     }
 
     /**
@@ -168,11 +177,9 @@ class WorkflowClient implements WorkflowClientInterface
     {
         $workflow = $this->reader->fromClass($class);
 
-        return new WorkflowProxy(
-            $this,
-            $this->newUntypedWorkflowStub($workflow->getID(), $options),
-            $workflow
-        );
+        $proxy = new WorkflowProxy($this, $this->newUntypedWorkflowStub($workflow->getID(), $options), $workflow);
+
+        return $this->proxy->createProxy($class, Proxy::initializer($proxy));
     }
 
     /**
@@ -201,11 +208,11 @@ class WorkflowClient implements WorkflowClientInterface
     ): object {
         $workflow = $this->reader->fromClass($class);
 
-        return new WorkflowProxy(
-            $this,
-            $this->newUntypedRunningWorkflowStub($workflowID, $runID, $workflow->getID()),
-            $workflow
-        );
+        $stub = $this->newUntypedRunningWorkflowStub($workflowID, $runID, $workflow->getID());
+
+        $proxy = new WorkflowProxy($this, $stub, $workflow);
+
+        return $this->proxy->createProxy($class, Proxy::initializer($proxy));
     }
 
     /**
