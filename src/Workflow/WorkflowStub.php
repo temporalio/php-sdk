@@ -29,6 +29,7 @@ class WorkflowStub
     public static function fromWorkflow($workflow): WorkflowStubInterface
     {
         $workflowStub = null;
+
         if ($workflow instanceof WorkflowProxy) {
             $workflowStub = $workflow->__getUntypedStub();
         }

@@ -14,16 +14,17 @@ namespace Temporal\Client;
 use ProxyManager\Factory\LazyLoadingValueHolderFactory;
 use Spiral\Attributes\AttributeReader;
 use Temporal\Client\GRPC\ServiceClientInterface;
-use Temporal\Common\MethodRetry;
+use Temporal\Client\Proxy\ProxyFactory;
+use Temporal\Client\Proxy\ProxyFactoryInterface;
 use Temporal\DataConverter\DataConverter;
 use Temporal\DataConverter\DataConverterInterface;
 use Temporal\Exception\InvalidArgumentException;
 use Temporal\Internal\Client\ActivityCompletionClient;
+use Temporal\Internal\Client\WorkflowProxy;
 use Temporal\Internal\Client\WorkflowRun;
 use Temporal\Internal\Client\WorkflowStarter;
-use Temporal\Internal\Declaration\Reader\WorkflowReader;
-use Temporal\Internal\Client\WorkflowProxy;
 use Temporal\Internal\Client\WorkflowStub;
+use Temporal\Internal\Declaration\Reader\WorkflowReader;
 use Temporal\Internal\Workflow\Proxy;
 use Temporal\Workflow\WorkflowExecution;
 use Temporal\Workflow\WorkflowRunInterface;
@@ -42,24 +43,24 @@ class WorkflowClient implements WorkflowClientInterface
     private DataConverterInterface $converter;
     private WorkflowStarter $starter;
     private WorkflowReader $reader;
-    private LazyLoadingValueHolderFactory $proxy;
+    private ProxyFactoryInterface $proxy;
 
     /**
      * @param ServiceClientInterface $serviceClient
      * @param ClientOptions|null $options
      * @param DataConverterInterface|null $converter
-     * @param LazyLoadingValueHolderFactory|null $proxy
+     * @param ProxyFactoryInterface|null $proxyFactory
      */
     public function __construct(
         ServiceClientInterface $serviceClient,
         ClientOptions $options = null,
         DataConverterInterface $converter = null,
-        LazyLoadingValueHolderFactory $proxy = null
+        ProxyFactoryInterface $proxyFactory = null
     ) {
         $this->client = $serviceClient;
         $this->clientOptions = $options ?? new ClientOptions();
         $this->converter = $converter ?? DataConverter::createDefault();
-        $this->proxy = $proxy ?? new LazyLoadingValueHolderFactory();
+        $this->proxy = $proxyFactory ?? new ProxyFactory();
 
         $this->starter = new WorkflowStarter($serviceClient, $this->converter, $this->clientOptions);
         $this->reader = new WorkflowReader(new AttributeReader());
@@ -69,16 +70,16 @@ class WorkflowClient implements WorkflowClientInterface
      * @param ServiceClientInterface $serviceClient
      * @param ClientOptions|null $options
      * @param DataConverterInterface|null $converter
-     * @param LazyLoadingValueHolderFactory|null $proxy
+     * @param ProxyFactoryInterface|null $proxyFactory
      * @return static
      */
     public static function create(
         ServiceClientInterface $serviceClient,
         ClientOptions $options = null,
         DataConverterInterface $converter = null,
-        LazyLoadingValueHolderFactory $proxy = null
+        ProxyFactoryInterface $proxyFactory = null
     ): self {
-        return new self($serviceClient, $options, $converter, $proxy);
+        return new self($serviceClient, $options, $converter, $proxyFactory);
     }
 
     /**
@@ -102,6 +103,7 @@ class WorkflowClient implements WorkflowClientInterface
         $workflowStub = WorkflowStubConverter::fromWorkflow($workflow);
 
         $returnType = null;
+
         if ($workflow instanceof WorkflowProxy) {
             $returnType = $workflow->__getReturnType();
         }
@@ -179,7 +181,7 @@ class WorkflowClient implements WorkflowClientInterface
 
         $proxy = new WorkflowProxy($this, $this->newUntypedWorkflowStub($workflow->getID(), $options), $workflow);
 
-        return $this->proxy->createProxy($class, Proxy::initializer($proxy));
+        return $this->proxy->create($class, $proxy);
     }
 
     /**
@@ -212,7 +214,7 @@ class WorkflowClient implements WorkflowClientInterface
 
         $proxy = new WorkflowProxy($this, $stub, $workflow);
 
-        return $this->proxy->createProxy($class, Proxy::initializer($proxy));
+        return $this->proxy->create($class, $proxy);
     }
 
     /**

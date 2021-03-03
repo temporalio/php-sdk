@@ -21,9 +21,8 @@ use Temporal\Tests\Activity\SimpleActivity;
 class SimpleWorkflow
 {
     #[WorkflowMethod(name: 'SimpleWorkflow')]
-    public function handler(
-        string $input
-    ): iterable {
+    public function handler(string $input)
+    {
         $simple = Workflow::newActivityStub(
             SimpleActivity::class,
             ActivityOptions::new()
