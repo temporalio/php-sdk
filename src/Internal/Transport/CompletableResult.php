@@ -56,7 +56,6 @@ class CompletableResult implements CompletableResultInterface
     private string $layer;
 
     /**
-     * CompletableResult constructor.
      * @param WorkflowContextInterface $context
      * @param LoopInterface $loop
      * @param PromiseInterface $promise
@@ -110,8 +109,21 @@ class CompletableResult implements CompletableResultInterface
         $promise = $this->promise()
             ->then($onFulfilled, $onRejected, $onProgress);
 
-        return $promise;
-        //return new Future($promise, $this->worker);
+        return $this->decorateWith($promise);
+    }
+
+    /**
+     * @param PromiseInterface $promise
+     * @return PromiseInterface
+     */
+    private function decorateWith(PromiseInterface $promise): PromiseInterface
+    {
+        return new CompletableResult(
+            $this->context,
+            $this->loop,
+            $promise,
+            $this->layer
+        );
     }
 
     /**
@@ -119,7 +131,7 @@ class CompletableResult implements CompletableResultInterface
      */
     public function promise(): PromiseInterface
     {
-        return $this->deferred->promise();
+        return $this->decorateWith($this->deferred->promise());
     }
 
     /**
